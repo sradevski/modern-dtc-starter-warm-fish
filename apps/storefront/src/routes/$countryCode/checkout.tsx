@@ -1,0 +1,49 @@
+import { createFileRoute, notFound } from "@tanstack/react-router"
+import Checkout from "@/pages/checkout"
+import { getRegion } from "@/lib/data/regions"
+import { CheckoutStepKey } from "@/lib/types/global"
+import { sanitize } from "@/lib/utils/sanitize"
+
+export const Route = createFileRoute("/$countryCode/checkout")({
+  validateSearch: (
+    search
+  ): { step: CheckoutStepKey; redirectResult?: string } => {
+    const step = search.step
+    // Adyen returns the shopper to the review step with `redirectResult` after a redirect, for
+    // example to their bank's authentication page.
+    const redirectResult =
+      typeof search.redirectResult === "string"
+        ? search.redirectResult
+        : undefined
+    if (!Object.values(CheckoutStepKey).includes(step as CheckoutStepKey)) {
+      return { step: CheckoutStepKey.ADDRESSES }
+    }
+    return { step: step as CheckoutStepKey, redirectResult }
+  },
+  loaderDeps: ({ search: { step } }) => {
+    return {
+      step,
+    }
+  },
+  loader: async ({ params, context, deps }) => {
+    const { countryCode } = params
+    const { queryClient } = context
+    const { step } = deps
+
+    const region = await queryClient.ensureQueryData({
+      queryKey: ["region", countryCode],
+      queryFn: () => getRegion({ country_code: countryCode }),
+    })
+
+    if (!region) {
+      throw notFound()
+    }
+
+    return sanitize({
+      region,
+      countryCode,
+      step,
+    })
+  },
+  component: Checkout,
+})
